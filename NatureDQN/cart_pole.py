@@ -19,6 +19,7 @@ BATCH_SIZE = 32
 GAMMA = 0.9
 C = 10
 
+# --------------------------------Helper Structure---------------------------------------------------------
 class ReplayMemory:
     def __init__(self, capacity):
         # New class: the five element tuple
@@ -56,7 +57,7 @@ class QNet(nn.Module):
         x = self.linear2(x)
         return x
 
-# ----------------------------------------Main------------------------------------------
+# ----------------------------------------Main Structure------------------------------------------
 class NatureDQN:
     def __init__(self):
         # Environment part
@@ -91,14 +92,19 @@ class NatureDQN:
             return np.argmax(actions_values)
 
     def __Train(self):
-        # Get data set
+        """
+        Train the policy net with mini_batch data set.
+        The Q net defined here would return all action and its Q values by given state.
+        But we only need one best action to optimize at a time.
+        """
+        # Step 1: Get data set
         mini_batch = self.replay_buffer.sample(BATCH_SIZE)
         cur_states_batch = [data[0] for data in mini_batch]
         actions_batch = [data[1] for data in mini_batch]
         reward_batch = [data[2] for data in mini_batch]
         next_states_batch = [data[3] for data in mini_batch]
 
-        # Forward
+        # Step 2: Forward
         # Calculate prediction
         y_true = []
         Q_values = self.target_net(next_states_batch)
@@ -112,35 +118,38 @@ class NatureDQN:
         # Get true labels
         y_pred = self.policy_net(cur_states_batch).gather(1, torch.tensor(actions_batch).unsqueeze(1))
 
-        # Backward
-        # 注意两者的大小必须适配！！
+        # Step 3:Backward
+        # 注意两者的形状必须适配！！
         loss = self.loss_fn(y_pred, y_true)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
     def Episode(self):
+        """ Do episode due to the paper. """
         state = env.reset()
         for step in range(STEP):
-            # Choose action and interact with environment
+            # Step 1: Choose action and interact with environment
             action = self.__SelectAction(state)
             next_state, reward, done, __ = env.step(action)
-            # Rewrite reward
+            # Rewrite reward(optional)
             reward = -1 if done else 0.1
-            # Update
+            # Step 2: Update
             self.replay_buffer.push(state, action, reward, next_state, done)
             state = next_state
-
+            # Step 3: Training
             if len(self.replay_buffer) > BATCH_SIZE:
                 self.__Train()
             if done:
                 break
 
     def Update(self, episode, C=10):
+        """ Update policy net due to the episode """
         if episode % C == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
 
     def Test(self, TEST=10):
+        """ Test the Nature DQN by using CartPole-v0 """
         total_reward = 0
         for i in range(TEST):
             state = env.reset()
@@ -154,10 +163,12 @@ class NatureDQN:
         avg_reward = total_reward / TEST
         print("Episode: ", (episode + 100), "Evaluation Average Reward:", avg_reward)
 
-# ---------------------------------------Helper----------------------------------------
+
 if __name__ == "__main__":
+    # Initialize
     env = gym.make('CartPole-v0')
     solution = NatureDQN()
+    # Do episode
     for episode in range(EPISODE):
         # Episode
         solution.Episode()
@@ -165,4 +176,5 @@ if __name__ == "__main__":
         # Test
         if episode % 100 == 0:
             solution.Test()
+    # Done
     env.close()
