@@ -127,7 +127,7 @@ class DQN:
         for step in range(STEP):
             # 选择动作并与环境交互, 获得奖励
             action = self.__SelectAction(state)
-            next_state, reward, done, __ = env.step(action)
+            next_state, reward, done, _ = env.step(action)
             reward = -1 if done else 0.1
             # 更新
             self.replay_buffer.push(state, action, reward, next_state, done)
