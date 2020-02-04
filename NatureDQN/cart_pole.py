@@ -148,7 +148,7 @@ class NatureDQN:
         if episode % C == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
 
-    def Test(self, TEST=10):
+    def Test(self, episode, TEST=10):
         """ Test the Nature DQN by using CartPole-v0 """
         total_reward = 0
         for i in range(TEST):
@@ -175,6 +175,6 @@ if __name__ == "__main__":
         solution.Update(episode=episode)
         # Test
         if episode % 100 == 0:
-            solution.Test()
+            solution.Test(episode)
     # Done
     env.close()
