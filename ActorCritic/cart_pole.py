@@ -1,4 +1,3 @@
-# 这东西真的能收敛？我表示深深地质疑
 import gym
 
 import numpy as np
