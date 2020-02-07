@@ -12,9 +12,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 EPISODE = 3000  # episode限制
-STEP = 300  # 采样上限
-BATCH_SIZE = 32
-GAMMA = 0.9
+STEP = 3000  # 采样上限
+GAMMA = 0.95
 
 class ActorNet(nn.Module):
     def __init__(self, in_features, out_features):
@@ -28,6 +27,7 @@ class ActorNet(nn.Module):
             x = torch.tensor(x, dtype=torch.float, requires_grad=True)
         x = F.relu(self.hidden(x))
         # 由于对于动作的选择是一个二分类问题，所以我这里使用sigmoid做激活函数
+        # 当然这里用softmax也是可以的
         x = F.softmax(self.output(x))
         return x
 
@@ -47,49 +47,29 @@ class CriticNet(nn.Module):
         return x
 
 
-class Memory:
-    def __init__(self):
-        self.states = []
-        self.actions = []
-        self.rewards = []
-
-    def Store(self, state, action, reward):
-        self.states.append(state)
-        self.actions.append(action)
-        self.rewards.append(reward)
-
-    def Empty(self):
-        self.states = []
-        self.actions = []
-        self.rewards = []
-
-
 class ActorCritic:
     def __init__(self):
         # Environment part
         self.state_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
-        # Memory replay
-        self.memory = Memory()
         # Network part
         self.actor = ActorNet(self.state_dim, self.action_dim)              # 这个是输出策略的
         self.critic = CriticNet(self.state_dim, 1)                          # 这个是输出价值的
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=0.2)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=0.2)
-        # Other part
-        self.count = 0
+        self.actor_optimizer = optim.SGD(self.actor.parameters(), lr=0.1)
+        self.critic_optimizer = optim.SGD(self.critic.parameters(), lr=0.1)
 
     def __GetV(self, cur_state, next_state, reward):
+        """ 利用Critic网络计算出对应动作的价值，来提示我们Actor网络的更新 """
         # 得到Q值输出
         cur_value = self.critic(cur_state)
         next_value = self.critic(next_state)
         # 计算TD误差
         td_error = reward + GAMMA * next_value - cur_value      # 如果你的计算图中包含这种中间结果，那么就要retain_graph=True
         # 反向传播优化critic网络
-        mse_loss = -td_error ** 2
-        self.actor_optimizer.zero_grad()
+        mse_loss = td_error ** 2
+        self.critic_optimizer.zero_grad()
         mse_loss.backward(retain_graph=True)
-        self.actor_optimizer.step()
+        self.critic_optimizer.step()
 
         return td_error
 
@@ -109,7 +89,7 @@ class ActorCritic:
         self.actor_optimizer.zero_grad()
         # 反向传播优化actor网络
         m = Categorical(policy)
-        loss = m.log_prob(action) * td_error
+        loss = -m.log_prob(action) * td_error
         loss.backward(retain_graph=True)
         self.actor_optimizer.step()
 
@@ -118,6 +98,7 @@ class ActorCritic:
         for step in range(STEP):
             action = self.__SelectAction(state)
             next_state, reward, done, _ = env.step(action)
+            reward = -1 if done else 0.1
             td_error = self.__GetV(state, next_state, reward)
             self.__Learn(action, state, td_error)
             state = next_state
@@ -137,6 +118,7 @@ class ActorCritic:
                     break
         avg_reward = total_reward / TEST
         print("Episode: ", (episode + 100), "Evaluation", avg_reward)
+
 
 if __name__ == "__main__":
     env = gym.make("CartPole-v0")
